@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ldn-bridge"
+version = "0.1.0"
+description = "Bridge ldn_mitm emulators to stock Switch local wireless"
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+dependencies = ["trio"]   # the `ldn` library is installed from GitHub by deck/setup.sh
+
+[tool.setuptools.packages.find]
+where = ["src"]

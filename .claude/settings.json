@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash scripts/deploy.sh)",
+      "Bash(bash scripts/pull.sh)",
+      "Bash(bash scripts/deck.sh:*)",
+      "Bash(python -m unittest:*)"
+    ],
+    "deny": [
+      "Read(**/prod.keys)",
+      "Read(**/title.keys)",
+      "Read(**/*.keys)",
+      "Read(**/ldn-passphrase.txt)"
+    ]
+  }
+}

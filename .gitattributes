@@ -1,0 +1,2 @@
+# The scripts run on Linux, so a Windows checkout must not convert them to CRLF.
+* text=auto eol=lf

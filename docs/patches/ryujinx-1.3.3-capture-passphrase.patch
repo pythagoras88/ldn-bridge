@@ -1,0 +1,69 @@
+diff --git a/nuget.config b/nuget.config
+index c8d71a8..6ed8f8d 100644
+--- a/nuget.config
++++ b/nuget.config
+@@ -5,8 +5,7 @@
+         <clear />
+         <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+         <!-- Only needed when using pre-release versions of Ryujinx.LibHac. -->
+-        <add key="LibHacAlpha" value="https://git.ryujinx.app/api/v4/projects/17/packages/nuget/index.json" />
+-        <add key="Ryujinx.UpdateClient" value="https://git.ryujinx.app/api/v4/projects/71/packages/nuget/index.json" />
++        <add key="LibHacAlpha" value="https://git.ryujinx.app/api/packages/projects/nuget/index.json" />
+     </packageSources>
+     <packageSourceMapping>
+         <!-- key value for <packageSource> should match key values from <packageSources> element -->
+@@ -14,10 +13,6 @@
+         <packageSource key="nuget.org">
+             <package pattern="*" />
+         </packageSource>
+-        <packageSource key="Ryujinx.UpdateClient">
+-            <package pattern="Ryujinx.UpdateClient" />
+-            <package pattern="Ryujinx.Systems.Update.Common" />
+-        </packageSource>
+         <packageSource key="LibHacAlpha">
+             <package pattern="Ryujinx.LibHac" />
+         </packageSource>
+diff --git a/src/Ryujinx.HLE/HOS/Services/Ldn/UserServiceCreator/IUserLocalCommunicationService.cs b/src/Ryujinx.HLE/HOS/Services/Ldn/UserServiceCreator/IUserLocalCommunicationService.cs
+index 62a86ad..588683e 100644
+--- a/src/Ryujinx.HLE/HOS/Services/Ldn/UserServiceCreator/IUserLocalCommunicationService.cs
++++ b/src/Ryujinx.HLE/HOS/Services/Ldn/UserServiceCreator/IUserLocalCommunicationService.cs
+@@ -566,6 +566,8 @@ namespace Ryujinx.HLE.HOS.Services.Ldn.UserServiceCreator
+             context.RequestData.BaseStream.Seek(4, SeekOrigin.Current); // Alignment?
+             NetworkConfig networkConfig = context.RequestData.ReadStruct<NetworkConfig>();
+ 
++            CaptureSecurityConfig("create", securityConfig, networkConfig.IntentId.LocalCommunicationId, networkConfig.LocalCommunicationVersion);
++
+             if (networkConfig.IntentId.LocalCommunicationId == -1 && NetworkClient.NeedsRealId)
+             {
+                 // TODO: Call nn::arp::GetApplicationControlProperty here when implemented.
+@@ -841,6 +843,21 @@ namespace Ryujinx.HLE.HOS.Services.Ldn.UserServiceCreator
+             return ConnectImpl(context, true);
+         }
+ 
++        // LDN bridge M2b: a private file rather than the log, so the passphrase never reaches the logs.
++        private static void CaptureSecurityConfig(string call, SecurityConfig config, long localCommunicationId, uint version)
++        {
++            string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ldn-passphrase.txt");
++            int size = Math.Min((int)config.PassphraseSize, LdnConst.PassphraseLengthMax);
++            string passphrase = Convert.ToHexString(config.Passphrase.AsSpan()[..size]);
++
++            File.AppendAllText(path, $"{call} lcid={localCommunicationId:x16} version={version} mode={(int)config.SecurityMode} size={config.PassphraseSize} passphrase={passphrase}\n");
++
++            if (OperatingSystem.IsLinux())
++            {
++                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
++            }
++        }
++
+         private ResultCode ConnectImpl(ServiceCtx context, bool isPrivate = false)
+         {
+             SecurityConfig securityConfig = context.RequestData.ReadStruct<SecurityConfig>();
+@@ -871,6 +888,8 @@ namespace Ryujinx.HLE.HOS.Services.Ldn.UserServiceCreator
+                 networkInfo = MemoryMarshal.Read<NetworkInfo>(networkInfoBytes);
+             }
+ 
++            CaptureSecurityConfig("connect", securityConfig, networkInfo.NetworkId.IntentId.LocalCommunicationId, localCommunicationVersion);
++
+             if (networkInfo.NetworkId.IntentId.LocalCommunicationId == -1 && NetworkClient.NeedsRealId)
+             {
+                 // TODO: Call nn::arp::GetApplicationControlProperty here when implemented.

@@ -1,0 +1,33 @@
+# Copy to config.toml on the Deck and edit it there. deploy.sh never copies or overwrites config.toml.
+
+[ldn]
+# Your own prod.keys on the Deck (deck/find_keys.sh lists likely locations). Never share this file.
+keys_path = "~/.config/Ryujinx/system/prod.keys"
+# USB adapter's MAC from deck/find_adapter.sh. Its phy number changes whenever it resets, so this is what finds it.
+adapter_mac = ""
+# Only used when adapter_mac is empty. NOT phy0 (that's the Deck's internal Wi-Fi).
+phyname = "phy1"
+# Interface the library creates for joining. The emulator binds to this name in phase 1.
+ifname = "ldn"
+# LDN uses these 7 channels. Trim to speed up scans once you know which one your Switch uses.
+channels = [1, 6, 11, 36, 40, 44, 48]
+# 1 = Switch 1 protocol (needs master_key_00). Add 3 if you have master_key_12.
+protocols = [1]
+# The game's local wireless passphrase as hex. Each game has its own, so capture it first (docs/SETUP.md, section 4).
+password_hex = ""
+nickname = "Deck"
+
+[game]
+# Leave empty to see every network. Fill in from `scan` output (M1).
+# Different editions of a game can share one id.
+local_communication_id = ""
+scene_id = -1
+
+[mitm]
+port = 11452
+
+[launch]
+# Used by deck/play.sh. Leave emulator empty for ~/Applications/ryujinx-1.3.3-x64.AppImage.
+emulator = ""
+# Game file to open. Leave empty to open the emulator's game list.
+game = ""
