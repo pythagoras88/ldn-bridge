@@ -2,15 +2,16 @@
 
 # LDN Bridge
 
-**Local wireless between an unmodified Switch and a Linux PC running an emulator.**
+**Local wireless play between an unmodified Nintendo Switch and a Linux PC running Ryujinx.**
 
-![Testing only](https://img.shields.io/badge/testing-only-red)
+![Testing only](https://img.shields.io/badge/status-testing%20only-red)
 ![Provided as is](https://img.shields.io/badge/provided-as%20is-lightgrey)
-![Platform: Linux](https://img.shields.io/badge/platform-Linux-555555)
+![Platform: Linux](https://img.shields.io/badge/platform-Linux%20%7C%20Steam%20Deck-555555)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab)
 ![License: GPLv3](https://img.shields.io/badge/license-GPLv3-blue)
 
-[Requirements](#requirements) · [Setup](#setup) · [Playing](#playing) · [Compatibility](#compatibility) · [Troubleshooting](#troubleshooting)
+[Highlights](#highlights) · [How it works](#how-it-works) · [Quick start](#quick-start) · [Playing](#playing) ·
+[Compatibility](#compatibility) · [Roadmap](#roadmap) · [Troubleshooting](#troubleshooting)
 
 </div>
 
@@ -23,47 +24,70 @@
 > **Don't ask how to dump games or keys, or where to get them or an emulator.** That is out of scope for this project,
 > and those questions won't be answered.
 
-## Overview
+## Highlights
 
-Nintendo's local wireless and the `ldn_mitm` multiplayer mode in Ryujinx use different protocols, so an emulator can't
-normally see a nearby Switch. LDN Bridge connects the two.
+- **Real local wireless, no console mods.** The Switch talks to the PC exactly as it would to another Switch nearby.
+- **Either side can host.** The emulator hosts by default, and the Switch joins. Join mode handles sessions the Switch
+  hosts.
+- **Turn-based searches work.** Searches where both consoles look for each other, like a Link Trade with a code,
+  connected in about 14 seconds in testing.
+- **One shortcut.** **Play with LDN Bridge** asks who hosts, starts the bridge and the emulator, and stops the bridge when
+  you close the game. It works from Steam Deck Game Mode.
+- **Self-healing adapter.** The bridge resets the USB adapter before hosting, finds it again whatever its number, and
+  restarts after a disconnect.
+- **Not tied to one game.** Each game supplies its own passphrase and ID in `config.toml`.
 
-A USB Wi-Fi adapter speaks Nintendo's over-the-air protocol, through kinnay's [`ldn`](https://github.com/kinnay/LDN)
-library. By default the bridge hosts: the game on the emulator hosts a session, and the adapter offers it to the Switch
-over the air. In join mode it works the other way, and the adapter joins a session the Switch hosts. Only discovery and
-membership are translated, and game traffic passes through unchanged.
+## How it works
+
+Nintendo's local wireless (LDN) and the `ldn_mitm` multiplayer mode in Ryujinx use different protocols, so an emulator
+can't normally see a nearby Switch. LDN Bridge connects the two.
+
+A USB Wi-Fi adapter speaks Nintendo's over-the-air protocol through kinnay's [`ldn`](https://github.com/kinnay/LDN)
+library. In **host mode** the game on the emulator hosts a session, and the adapter offers it to the Switch over the air.
+In **join mode** the adapter joins a session the Switch hosts, and the emulator sees it as a LAN session. Only discovery
+and membership are translated. Game traffic passes through unchanged.
 
 ```
                              Linux PC
            ┌──────────────────────────────────────────┐
  Switch ~~~│~~> USB adapter <-> LDN Bridge <-> Ryujinx│
- (joins)   │                                  ldn_mitm│
+           │                                  ldn_mitm│
            └──────────────────────────────────────────┘
 ```
 
+[Design notes](docs/DESIGN.md) and [protocol notes](docs/LDN_MITM_PROTOCOL.md) go into detail.
+
 ## Requirements
 
-- A Linux PC with Python 3.11 or later and a driver for your adapter. A Steam Deck works.
-- A USB Wi-Fi adapter with monitor mode and injection. See [Tested with](#tested-with).
-- Ryujinx with `ldn_mitm` mode. Ryubing 1.3.3 is the tested build.
-- Your own game and keys, dumped from your own Switch running custom firmware.
-- Compatible game updates on the emulator and the Switch.
-- The .NET 9 SDK, once per game, to capture its passphrase.
+| | |
+| --- | --- |
+| **Computer** | A Linux PC with Python 3.11 or later. A Steam Deck works. |
+| **Adapter** | A USB Wi-Fi adapter with monitor mode and injection, and a Linux driver. See [Tested with](#tested-with). |
+| **Emulator** | Ryujinx with `ldn_mitm` mode. Ryubing 1.3.3 is the tested build. |
+| **Game and keys** | Your own, dumped from your own Switch running custom firmware, with compatible updates on both sides |
+| **Once per game** | The .NET 9 SDK, to capture the game's local wireless passphrase |
 
-## Setup
+## Quick start
+
+1. Put the project at `~/ldn-bridge` or in Downloads, plug in the adapter, and close Ryujinx.
+2. Run `bash install.sh` from the project folder, or double-click it in Desktop Mode. It sets up the Python environment,
+   the adapter, `config.toml`, Ryujinx's network settings and the shortcuts, asks for your password once, and lists
+   anything left to do.
+3. Capture the game's passphrase ([setup guide, section 4](docs/SETUP.md#4-capture-the-passphrase)). Put it in
+   `config.toml` as `password_hex`, and the game's ID (`lcid=` in the capture) under `[game]` as
+   `local_communication_id`.
+4. Run **Play with LDN Bridge**.
+
+To bring your passphrase across from another install, put your saved `config.toml` in the project folder before running
+the installer. The installer has been tested on a freshly reset Steam Deck (SteamOS 3.9).
+
+<details>
+<summary><strong>Manual setup</strong></summary>
+
+<br>
 
 The [setup guide](docs/SETUP.md) has every command, including how to work from Windows over SSH. With
 [Claude Code](https://claude.com/claude-code), `CLAUDE.md` provides the project context.
-
-**Quick install.** Put the project at `~/ldn-bridge` or in Downloads, plug in the adapter, close Ryujinx, and run
-`bash install.sh` from the project folder (or double-click it in Desktop Mode). It sets up everything in steps 1, 2, 4
-and 5 below, asks for your password once, and lists anything left to do. To bring your passphrase across, put your saved
-`config.toml` in the project folder before running it. You still need step 3 for a new game. The installer has been tested
-on a freshly reset Steam Deck (SteamOS 3.9).
-
-To do it by hand instead:
-
-**1. Prepare the computer.** Plug in the adapter and run:
 
 ```bash
 git clone https://github.com/pythagoras88/ldn-bridge.git ~/ldn-bridge
@@ -74,116 +98,137 @@ bash deck/setup.sh                   # Python environment and the ldn library
 sudo bash deck/grant_caps.sh         # lets the bridge control the adapter without sudo
 sudo bash deck/usb_access.sh <MAC>   # lets the bridge reset the adapter before hosting
 cp config.example.toml config.toml   # set adapter_mac, keys_path, [game] and [launch]
+. .venv/bin/activate && python -m ldn_bridge keys-check   # key names only, never values
+bash deck/install_shortcuts.sh       # Play with LDN Bridge and the other shortcuts
 ```
 
-The `deck/` folder is named after the first test machine. Its scripts also work on other Linux computers, apart from the
-notes in the setup guide.
+In Ryujinx, under **Settings > Network**, set Mode to `ldn_mitm` and turn Guest Internet Access off. The `deck/` folder
+is named after the first test machine; its scripts also work on other Linux computers, apart from the notes in the setup
+guide.
 
-**2. Check your keys.** This prints key names only, never their values:
-
-```bash
-. .venv/bin/activate && python -m ldn_bridge keys-check
-```
-
-**3. Capture the game's passphrase.** Follow [section 4 of the setup guide](docs/SETUP.md#4-capture-the-passphrase), then
-put it in `config.toml` as `password_hex`, and the game's ID (`lcid=` in the capture) under `[game]` as
-`local_communication_id`. Host mode needs the ID.
-
-**4. Configure Ryujinx.** Under **Settings > Network**, set Mode to `ldn_mitm` and turn Guest Internet Access off.
-
-**5. Install the shortcuts.**
-
-```bash
-bash deck/install_shortcuts.sh
-```
-
-> [!TIP]
-> Ryujinx's Network Interface must be `ldn`, which only exists while the bridge runs. **Play with LDN Bridge** sets it
-> for you before each launch. Don't save Ryujinx's settings while the bridge is stopped, or it goes back to Default.
+</details>
 
 ## Playing
 
 1. Plug in the adapter.
-2. Run **Play with LDN Bridge**. It asks who hosts, then starts the bridge and the emulator. Closing the emulator stops
-   the bridge. If you don't pick within 15 s, the emulator hosts.
-3. Host a local multiplayer session in the game on the emulator.
-4. Join it from the Switch. If the game shows a code, search with it.
+2. Run **Play with LDN Bridge** and choose who hosts. If you don't choose within 15 s, the emulator hosts.
+3. **This computer hosts:** host a local session in the game on the emulator, then join it from the Switch. If the game
+   shows a code, search with it.
+4. **Switch hosts:** host on the Switch, then join from the game on the emulator.
+5. Close the game when you're done. The bridge stops by itself.
 
-The emulator hosts by default. Searches where both consoles look for each other and take turns hosting work too, because
-the Switch joins one of the emulator's turns. Before hosting, the bridge resets the adapter over USB, which takes about
-2 s. Don't restart the bridge while the game is in local play, or the emulator can crash.
+> [!TIP]
+> Host mode covers everything tested, including searches where both consoles take turns hosting. Choose **Switch hosts**
+> only to join a session that has to be hosted on the Switch.
+
+> [!IMPORTANT]
+> Leave local play in the game before stopping or restarting the bridge. Ryujinx 1.3.3 can crash when the bridge's
+> network interface goes away mid-session.
 
 <details>
-<summary><strong>When the Switch hosts (join mode)</strong></summary>
+<summary><strong>Steam Deck Game Mode</strong></summary>
 
 <br>
 
-To join a session the Switch hosts, pick **Switch hosts** when Play with LDN Bridge asks. To skip the question, set
-`mode = "host"` or `mode = "join"` under `[launch]` in `config.toml`. Then host on the Switch and join from the
-emulator. The bridge keeps looking for a session and rejoins after a
-disconnect, but the game has to rejoin the session itself. In host mode the emulator can't see sessions the Switch hosts.
+The installer adds **Play with LDN Bridge** to Steam. Otherwise, in Desktop Mode, right-click it in the application menu
+and choose **Add to Steam**. In Game Mode, tap the host choice on the touchscreen or use the trackpad, and exit with
+**Steam button > Exit Game**. Use the charger for long sessions, and keep the adapter still while you play.
 
 </details>
 
 <details>
-<summary><strong>Choosing the game and emulator</strong></summary>
+<summary><strong>Configuration</strong></summary>
 
 <br>
 
-Set these in `config.toml`. If `game` is empty, the emulator opens its game list:
+Everything lives in `config.toml`, which never leaves your computer:
 
 ```toml
+[ldn]
+adapter_mac = "aa:bb:cc:dd:ee:ff"   # from deck/find_adapter.sh
+password_hex = ""                    # the game's passphrase, captured once per game
+
+[game]
+local_communication_id = ""          # the game's ID, needed by host mode
+
 [launch]
+mode = "ask"                         # "ask", "host" or "join"
 emulator = "~/Applications/ryujinx-1.3.3-x64.AppImage"
-game = "~/Games/your-game.nsp"
+game = "~/Games/your-game.nsp"       # empty opens the emulator's game list
 ```
 
-</details>
-
-<details>
-<summary><strong>Steam Deck</strong></summary>
-
-<br>
-
-In Desktop Mode, right-click **Play with LDN Bridge** in the application menu and choose **Add to Steam**. Then run it from
-your library in Game Mode, and exit with **Steam button > Exit Game**. The bridge stops by itself. Use the charger for long
-sessions.
+`LDN_MODE=host` or `LDN_MODE=join` overrides `mode` for one launch. `config.toml` holds one game's passphrase at a time.
 
 </details>
 
 ## Compatibility
 
-The bridge isn't tied to one game. Switch 1 games that use local wireless share the same system, so others may work, but
-only the setup under [Tested with](#tested-with) has been confirmed.
+| | Host mode (default) | Join mode |
+| --- | :---: | :---: |
+| The emulator hosts a lobby, the Switch joins | ✅ | — |
+| The Switch hosts a lobby, the emulator joins | — | ✅ |
+| Both consoles search and take turns hosting | ✅ | ❌ |
+| Adapter reset before each session | ✅ | not needed |
 
-Each game needs its own passphrase, a compatible update on both sides, and the right session ID. The bridge sends the ID
-used by the tested game, so some games need a small code change. [Testing notes](docs/TESTING.md) has the details.
+The bridge isn't tied to one game. Switch 1 games that use local wireless share the same system, so others may work, but
+only the setup under [Tested with](#tested-with) has been confirmed. Each game needs its own passphrase, its ID for host
+mode, compatible updates on both sides, and the right session ID. [Testing notes](docs/TESTING.md) has the details.
 
 | Limit | What it means |
 | --- | --- |
-| One direction at a time | Host mode (the default) can't see sessions the Switch hosts; join mode can't offer the emulator's |
-| Game ID for hosting | Host mode needs the game's `local_communication_id` under `[game]` in `config.toml` (`scan` shows it) |
+| One direction at a time | Host mode can't see sessions the Switch hosts, and join mode can't offer the emulator's |
 | Timing | Fast games may lag or disconnect from the extra hop and emulator slowdown |
 | Emulator support | The game has to run well in Ryujinx, including its local play |
 | One player per bridge | Each Linux PC bridges one emulator, which takes one player slot |
 
 **Not covered:** LAN mode, which is a separate wired system, native Switch 2 games, and online play.
 
+## Tested with
+
+| | |
+| --- | --- |
+| **Game** | Pokémon Scarlet on a Steam Deck, with Pokémon Violet on a Switch 2 |
+| **Works** | Union Circle hosted by either console, with trades, Tera Raids, Link Battles, encounters from the other version, picnics and Blueberry Quests. The Poké Portal's Tera Raid search, hosted by either console. The Poké Portal's Link Trade with a code, in host mode. |
+| **Doesn't work** | In host mode, joining a raid the Switch hosts outside Union Circle: host it on the emulator, or choose **Switch hosts**. |
+| **Computer** | Steam Deck on SteamOS 3.9.5 |
+| **Adapter** | Alfa AWUS036ACM Long-Range Dual-Band AC1200 USB 3.0 (MT7612U chip) |
+| **Emulator** | Ryujinx 1.3.3 |
+
+Everything else is untested, including Link Trade without a code, other games, the original Switch, and other Linux
+computers. [Testing notes](docs/TESTING.md#tested-so-far) has the full list.
+
+## Roadmap
+
+- **Longer sessions.** A full Link Battle and a 30-minute session in host mode.
+- **Pokémon Legends: Z-A.** Planned: find out which local wireless play the Switch 1 version offers, capture its
+  passphrase and ID, and test it through the bridge. Not tested yet.
+- **One mode for everything.** Let the bridge switch between hosting and joining by itself, which needs a network
+  interface that stays in place while the adapter changes role.
+- **Steam Deck polish.** Keep the Deck's built-in Wi-Fi connected in Game Mode with the adapter plugged in at boot, and
+  stop Ryujinx crashing when it hosts during join mode.
+- **Later.** Other Linux computers, Ryujinx on Windows through WSL 2 (working, but paused), other emulators and other
+  games.
+
+[Plan](docs/PLAN.md) has the order and details, and [milestones](docs/MILESTONES.md) has what each step proved.
+
 ## Troubleshooting
 
 | Problem | Likely fix |
 | --- | --- |
-| The session doesn't appear in the game | Set Network Interface to `ldn`. If local multiplayer opened before the bridge joined, Ryujinx silently uses your normal network, so close it and reopen it. Its log should show a `169.254.x.x` address. |
-| Still hidden after that | Check the game's session ID. See [what each game needs](docs/TESTING.md#what-each-game-needs). |
-| A search where both consoles look for each other finds nobody | Use host mode: the Switch joins one of the emulator's hosting turns. In join mode these searches can't connect. |
+| The Switch doesn't find the emulator's session | Host mode needs `local_communication_id` under `[game]`. Check that the game shows a code and the Switch searches with it. |
 | The Switch stays on "searching" and the bridge says its game traffic can't be read | The adapter kept a key from an earlier session. Unplug it and plug it back in. If the bridge also said it couldn't reset the adapter, run `sudo bash deck/usb_access.sh` once. |
-| The bridge says to set `local_communication_id` | Host mode needs the game's ID under `[game]` in `config.toml`. See step 3 of Setup. |
-| The emulator crashed when the bridge restarted | Ryujinx crashes if `ldn` disappears during local play. Leave local play before stopping or restarting the bridge. |
+| The emulator doesn't see the Switch's session (join mode) | Ryujinx's Network Interface must be `ldn`. If local play opened before the bridge joined, close it and reopen it. Its log should show a `169.254.x.x` address. |
+| Still hidden after that | Check the game's session ID. See [what each game needs](docs/TESTING.md#what-each-game-needs). |
+| A search where both consoles look for each other finds nobody | Use host mode: the Switch joins one of the emulator's hosting turns. |
 | `join` times out at authentication | `password_hex` is wrong or missing, or a game update changed the passphrase. Capture it again. |
 | The emulator logs `Failed to connect` | Join again. This looks like a timing bug in Ryujinx, and the next attempt worked. |
-| `scan` finds nothing | Keep the session open on the Switch, near the computer. Then check the adapter with `deck/find_adapter.sh`. |
+| The emulator crashed when the bridge restarted | Leave local play before stopping or restarting the bridge. |
 | `Operation not permitted` | Run `sudo bash deck/grant_caps.sh`. Run it again after recreating `.venv`. |
-| The session drops | Check the adapter and any hub are firmly connected, and that the computer has stable power. |
+| The session drops | Keep the adapter still, and check that it and any hub are firmly connected and the computer has stable power. |
+
+> [!NOTE]
+> Ryujinx's Network Interface must be `ldn`, which only exists while the bridge runs. **Play with LDN Bridge** sets it
+> before each launch. Saving Ryujinx's settings while the bridge is stopped resets it to Default.
 
 ## Commands
 
@@ -218,19 +263,24 @@ python -m unittest discover -s tests -v
 
 </details>
 
-## Project layout
+<details>
+<summary><strong>Project layout</strong></summary>
+
+<br>
 
 ```
 src/ldn_bridge/   the bridge
 install.sh        one-step setup on the Linux computer
 deck/             setup and launch scripts for the Linux computer
 scripts/          deploy and run helpers for working from Windows (Git Bash)
-docs/             setup, testing notes, design, protocol notes and milestones
+docs/             setup, testing notes, plan, design, protocol notes and milestones
 docs/patches/     Ryujinx 1.3.3 patch for capturing a game's passphrase
 tests/            unit tests
 windows/, wsl/    Ryujinx on Windows through WSL 2 (works, but paused; see docs/WSL.md)
 CLAUDE.md         project rules and context for Claude Code
 ```
+
+</details>
 
 ## Safety
 
@@ -254,23 +304,9 @@ This project depends on `ldn` and `python-netlink`, which are GPLv3. `src/ldn_br
 described in the `ldn_mitm` (GPLv2) and Ryujinx (MIT) sources. The patch in `docs/patches/` modifies MIT-licensed Ryujinx
 code.
 
-This is an unofficial project and isn't affiliated with or endorsed by Nintendo or any game publisher. All trademarks
-belong to their owners. It's provided as is, for testing only, and only with a game and keys you dumped yourself from your
-own Switch.
-
-## Tested with
-
-| | |
-| --- | --- |
-| **Game** | Pokémon Scarlet on a Steam Deck, with Pokémon Violet on a Switch 2 |
-| **Result** | Union Circle hosted by either console: trades, Tera Raids, Link Battles, encounters from the other version, picnics and Blueberry Quests. The Poké Portal's Tera Raid search, hosted by either console. The Poké Portal's Link Trade with a code, in host mode, with partners found in about 14 s. |
-| **Doesn't work** | In host mode, joining a raid the Switch hosts outside Union Circle: host it on the emulator, or use join mode. |
-| **Computer** | Steam Deck on SteamOS 3.9.5 |
-| **Adapter** | Alfa AWUS036ACM Long-Range Dual-Band AC1200 USB 3.0 (MT7612U chip) |
-| **Emulator** | Ryujinx 1.3.3 |
-
-Keep the adapter still during play, because moving it much can drop the session. Everything else is untested,
-including Link Trade without a code, other games, the original Switch, and other Linux computers. [Testing notes](docs/TESTING.md#tested-so-far) has the full list.
+This is an unofficial project and isn't affiliated with or endorsed by Nintendo, The Pokémon Company or any game
+publisher. All trademarks belong to their owners. It's provided as is, for testing only, and only with a game and keys you
+dumped yourself from your own Switch.
 
 ---
 

@@ -3,7 +3,8 @@
 ## What this is
 A tool for playing **local wireless** between an **unmodified** Switch / Switch 2 and a Linux PC running a Switch
 emulator (a Ryujinx fork in **ldn_mitm** multiplayer mode). It isn't tied to one game, and each game supplies its own
-passphrase. Describe it that way in user-facing docs, and keep named games to the "Tested" sections.
+passphrase. Describe it that way in user-facing docs, and keep named games to the "Tested" sections and the planned
+games in the Roadmap.
 
 The bridge runs on Linux with a **USB Wi-Fi adapter** that supports monitor mode + injection. It's tested on a **Steam
 Deck** (SteamOS = Arch Linux) with an Alfa AWUS036ACM (MT7612U). Other Linux computers should work but are untested. It

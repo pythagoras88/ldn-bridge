@@ -68,5 +68,8 @@ also costs a few seconds for the adapter reset and channel change.
 
 ## Later
 
+- **Pokémon Legends: Z-A.** Find out which local wireless play the Switch 1 version offers, capture its passphrase and
+  ID, and test it in host and join mode. Its Switch 2 Edition is a native Switch 2 game, which the emulator can't run.
+
 After the Deck works fully: other Linux computers, Windows through WSL (W1 and W2 work, but it isn't being developed
 now), other emulators and other games.
