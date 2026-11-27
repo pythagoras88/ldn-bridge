@@ -6,10 +6,15 @@ import logging
 import socket
 import sys
 import time
+from pathlib import Path
 
 from . import config as config_mod
 from . import mitm_proto as mp
 from .config import PROJECT_ROOT
+
+log = logging.getLogger(__name__)
+
+HOST_TEST_STATUS_SECONDS = 15
 
 
 def setup_logging(name: str, verbose: bool) -> None:
@@ -78,16 +83,84 @@ def cmd_join(cfg, args):
     trio.run(main)
 
 
+def load_host_settings(cfg, args):
+    """The details of the session to host: from --capture if given, else the game's ID in config.toml, else the newest
+    scan capture. The emulator supplies the rest each time its game hosts."""
+    from . import hosting
+
+    if not cfg.password:
+        raise SystemExit("password_hex is empty in config.toml, so the Switch can't authenticate. "
+                         "See docs/SETUP.md, section 4.")
+    if not args.capture and cfg.local_communication_id is not None:
+        settings = hosting.settings_for_game(cfg.local_communication_id, cfg.protocols[0])
+        print(f"Hosting for game id 0x{settings.local_communication_id:016x} from config.toml, channel "
+              f"{settings.channel}.")
+        return settings
+    try:
+        path = Path(args.capture) if args.capture else hosting.latest_capture(PROJECT_ROOT / "captures")
+    except SystemExit:
+        raise SystemExit("Set local_communication_id under [game] in config.toml to the game's ID, which `scan` shows "
+                         "while a Switch hosts the game.") from None
+    scene = cfg.scene_id if getattr(args, "scene", None) is None else args.scene
+    settings = hosting.settings_from_capture(hosting.pick_session(hosting.load_sessions(path), scene, args.index))
+    print(f"Using {path.name}: id 0x{settings.local_communication_id:016x}, scene {settings.scene_id}, "
+          f"app version {settings.app_version}, channel {settings.channel}, up to {settings.max_participants} players, "
+          f"{len(settings.application_data)} bytes of session data.")
+    return settings
+
+
+def cmd_host_test(cfg, args):
+    """Host a copy of a captured session, with no emulator, to see if the adapter can host and the Switch can join."""
+    import ldn
+    import trio
+    from . import adapter, hosting, ldn_side
+
+    settings = load_host_settings(cfg, args)
+    joins = 0
+
+    async def main():
+        nonlocal joins
+        keys = ldn_side.load_keys(cfg)
+        if cfg.adapter_mac:
+            cfg.phyname = adapter.prepare(cfg.adapter_mac)
+        async with ldn.create_network(ldn_side.create_param(cfg, keys, settings)) as ap:
+            print(f"Hosting on {cfg.phyname} for {args.seconds:g} s. Ctrl-C stops it sooner. "
+                  "Search for the session from the same mode on the Switch.")
+            with trio.move_on_after(args.seconds):
+                while True:
+                    with trio.move_on_after(HOST_TEST_STATUS_SECONDS) as wait:
+                        ev = await ap.next_event()
+                    if wait.cancelled_caught:
+                        print(f"Still hosting: {ap.info().num_participants - 1} joined.")
+                    elif isinstance(ev, ldn.JoinEvent):
+                        joins += 1
+                        log.info("Joined: node %d at %s", ev.index, ev.participant.ip_address)
+                    elif isinstance(ev, ldn.LeaveEvent):
+                        log.info("Left: node %d", ev.index)
+
+    hosting.run_session(lambda: trio.run(main))
+    if joins:
+        print(f"RESULT: joined {joins} time(s). The adapter can host.")
+    else:
+        print("RESULT: nothing joined.")
+
+
 def cmd_bridge(cfg, args):
     import trio
-    from . import bridge, ldn_side
+    from . import bridge, hosting, ldn_side
+
+    mode = args.mode or config_mod.MODES[cfg.mode]
+    if mode == "emulator-hosts":
+        settings = load_host_settings(cfg, args)
+
+        async def host():
+            await bridge.emulator_hosts(cfg, ldn_side.load_keys(cfg), settings)
+        hosting.run_session(lambda: trio.run(host))
+        return
 
     async def main():
         keys = ldn_side.load_keys(cfg)
-        if args.mode == "switch-hosts":
-            await bridge.switch_hosts(cfg, keys, args.index, wait_enter=not args.no_wait)
-        else:
-            await bridge.emulator_hosts(cfg, keys)
+        await bridge.switch_hosts(cfg, keys, args.index, wait_enter=not args.no_wait, windows=args.windows)
     trio.run(main)
 
 
@@ -157,6 +230,33 @@ def cmd_mitm_fake_host(cfg, args):
     trio.run(main)
 
 
+def cmd_traffic(cfg, args):
+    """Count the protocols of all traffic on the adapter's interface (counts only, no addresses or payloads)."""
+    if sys.platform != "linux":
+        raise SystemExit("traffic runs on Linux only")
+    import select
+    from .netutil import iface_ipv4
+    from .traffic_stats import TrafficStats
+
+    _, bcast = iface_ipv4(cfg.ifname)
+    stats = TrafficStats(bcast)
+    sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0003))  # ETH_P_ALL
+    sock.bind((cfg.ifname, 0))
+    print(f"Counting traffic on {cfg.ifname}. Ctrl-C to stop.")
+    last = time.monotonic()
+    try:
+        with sock:  # outgoing frames (from the bridge itself) are counted too
+            while True:
+                if select.select([sock], [], [], 1.0)[0]:
+                    stats.add(sock.recv(65536))
+                if time.monotonic() - last >= 10:
+                    last = time.monotonic()
+                    print(stats.summary(), flush=True)
+    except KeyboardInterrupt:
+        pass
+    print("Final:", stats.summary())
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="ldn_bridge")
     ap.add_argument("--config", help="path to config.toml")
@@ -167,10 +267,20 @@ def main(argv=None):
     sub.add_parser("scan", help="scan for real LDN networks (M1)")
     p = sub.add_parser("join", help="join a real LDN network and print events (M2)")
     p.add_argument("--index", type=int)
+    p = sub.add_parser("host-test", help="host a captured session to see if the Switch can join (M6a)")
+    p.add_argument("--capture", help="scan capture to copy (default: the newest in captures/)")
+    p.add_argument("--scene", type=int, help="use the capture's session with this scene")
+    p.add_argument("--index", type=int, help="which session, if several match")
+    p.add_argument("--seconds", type=float, default=300, help="stop after this long (default: 300)")
     p = sub.add_parser("bridge", help="run the bridge (M4+)")
-    p.add_argument("mode", choices=["switch-hosts", "emulator-hosts"])
+    p.add_argument("mode", nargs="?", choices=["switch-hosts", "emulator-hosts"],
+                   help="default: [launch] mode in config.toml (host = emulator-hosts, join = switch-hosts)")
     p.add_argument("--index", type=int)
     p.add_argument("--no-wait", action="store_true", help="join without waiting for Enter")
+    p.add_argument("--windows", action="store_true",
+                   help="switch-hosts: the emulator runs on Windows, linked by windows/ldn_tunnel.py (docs/WSL.md)")
+    p.add_argument("--capture", help="emulator-hosts: scan capture to copy (default: the newest in captures/)")
+    p.add_argument("--scene", type=int, help="emulator-hosts: use the capture's session with this scene")
     p = sub.add_parser("mitm-scan", help="send an ldn_mitm Scan and decode replies (M3)")
     p.add_argument("--broadcast", required=True, help="broadcast address, e.g. 192.168.1.255")
     p.add_argument("--bind", default="0.0.0.0")
@@ -180,12 +290,15 @@ def main(argv=None):
     p.add_argument("--ip", help="override IP (with --broadcast), e.g. for loopback tests")
     p.add_argument("--broadcast")
 
+    sub.add_parser("traffic", help="count TCP, UDP, fragments and multicast on the adapter's interface")
+
     args = ap.parse_args(argv)
     setup_logging(args.cmd, args.verbose)
     cfg = config_mod.load(args.config)
     {
-        "keys-check": cmd_keys_check, "scan": cmd_scan, "join": cmd_join, "bridge": cmd_bridge,
-        "mitm-scan": cmd_mitm_scan, "mitm-fake-host": cmd_mitm_fake_host,
+        "keys-check": cmd_keys_check, "scan": cmd_scan, "join": cmd_join, "host-test": cmd_host_test,
+        "bridge": cmd_bridge, "mitm-scan": cmd_mitm_scan, "mitm-fake-host": cmd_mitm_fake_host,
+        "traffic": cmd_traffic,
     }[args.cmd](cfg, args)
 
 

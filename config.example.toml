@@ -18,8 +18,8 @@ password_hex = ""
 nickname = "Deck"
 
 [game]
-# Leave empty to see every network. Fill in from `scan` output (M1).
-# Different editions of a game can share one id.
+# The game's local wireless ID, from `scan` output while a Switch hosts the game. Host mode needs it. In join mode it
+# filters the sessions the bridge joins; leave it empty there to see every network. Editions of a game can share one id.
 local_communication_id = ""
 scene_id = -1
 
@@ -27,6 +27,10 @@ scene_id = -1
 port = 11452
 
 [launch]
+# "host": the game on the emulator hosts and the Switch joins. Works for every mode tested, including turn-based
+# searches like Link Trade. "join": the Switch hosts and the emulator joins. "ask": Play with LDN Bridge asks which,
+# and hosts if nothing is picked within 15 s.
+mode = "ask"
 # Used by deck/play.sh. Leave emulator empty for ~/Applications/ryujinx-1.3.3-x64.AppImage.
 emulator = ""
 # Game file to open. Leave empty to open the emulator's game list.

@@ -19,22 +19,24 @@ def mac_bytes(mac) -> bytes:
     return bytes(mac)
 
 
+def node_from_participant(index: int, p) -> NodeInfo:
+    return NodeInfo(
+        ip=p.ip_address,
+        mac=mac_bytes(p.mac_address),
+        node_id=index,
+        is_connected=bool(p.connected),
+        user_name=bytes(p.name)[:32],
+        local_communication_version=p.app_version & 0xFFFF,
+    )
+
+
 def from_ldn(info, *, host_ip_override: str | None = None) -> NetworkInfo:
     """Build an ldn_mitm NetworkInfo from an ldn.NetworkInfo.
 
     host_ip_override: replace node 0's IP (used in ScanResp so the emulator's TCP Connect
     lands on the bridge; see docs/DESIGN.md step 5). Leave None for SyncNetwork.
     """
-    nodes: list[NodeInfo] = []
-    for i, p in enumerate(list(info.participants)[:MAX_NODES]):
-        nodes.append(NodeInfo(
-            ip=p.ip_address,
-            mac=mac_bytes(p.mac_address),
-            node_id=i,
-            is_connected=bool(p.connected),
-            user_name=bytes(p.name)[:32],
-            local_communication_version=p.app_version & 0xFFFF,
-        ))
+    nodes = [node_from_participant(i, p) for i, p in enumerate(list(info.participants)[:MAX_NODES])]
     while len(nodes) < MAX_NODES:
         nodes.append(NodeInfo(node_id=len(nodes)))
 

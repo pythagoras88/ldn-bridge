@@ -40,3 +40,9 @@ empty passphrase times out at authentication. Its 64-byte passphrase, read from 
 - Default `phyname` is `phy0` = Deck's internal Wi-Fi. Always pass the USB adapter's phy.
 - Needs `CAP_NET_ADMIN` (+ raw sockets). NetworkManager must not touch the adapter or the `ldn*` interfaces.
 - `ConnectNetworkParam.check()` rejects networks whose `version` isn't 2, 3 or 4.
+- The station listens to nl80211 MLME events from every Wi-Fi interface and doesn't check the interface index. When
+  the computer's own Wi-Fi switches routers, the station removed on that interface ends the LDN session as
+  `DisconnectEvent(reason=6)`. `ldn_side._own_messages_only` replaces `Station._process_messages` and ignores events
+  for other interfaces. Confirmed on a Steam Deck on 2026-11-07: two sessions ended within 60 ms of the built-in Wi-Fi
+  roaming. The join loop in `Station` reads `NL80211_CMD_CONNECT` without the same check, which hasn't been seen to
+  cause a failure.

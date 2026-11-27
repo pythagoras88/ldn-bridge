@@ -10,6 +10,15 @@ except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# [launch] mode in config.toml, and the bridge command each one runs.
+MODES = {"host": "emulator-hosts", "join": "switch-hosts",
+         # deck/play.sh asks which side hosts. Anything that runs the bridge without asking hosts.
+         "ask": "emulator-hosts"}
+# Key names each LDN protocol needs: 1 for Switch 1 games, 3 for the newer protocol.
+REQUIRED_KEYS = {
+    1: ["aes_kek_generation_source", "aes_key_generation_source", "master_key_00"],
+    3: ["aes_kek_generation_source", "aes_key_generation_source", "master_key_12"],
+}
 
 
 @dataclass
@@ -25,6 +34,8 @@ class Config:
     local_communication_id: int | None = None
     scene_id: int | None = None
     mitm_port: int = 11452
+    # "host": the emulator hosts and the Switch joins (`bridge emulator-hosts`). "join": the Switch hosts.
+    mode: str = "host"
 
     @property
     def keys_file(self) -> str:
@@ -57,4 +68,7 @@ def load(path: str | os.PathLike | None = None) -> Config:
     cfg.local_communication_id = _int(game.get("local_communication_id"))
     cfg.scene_id = _int(game.get("scene_id"))
     cfg.mitm_port = int(mitm.get("port", cfg.mitm_port))
+    cfg.mode = data.get("launch", {}).get("mode", cfg.mode) or cfg.mode
+    if cfg.mode not in MODES:
+        raise SystemExit(f"mode = \"{cfg.mode}\" in config.toml isn't one of: {', '.join(MODES)}.")
     return cfg

@@ -19,8 +19,13 @@ class ControlPlane:
     def __init__(self, local_ip: str, broadcast_ip: str, port: int,
                  scan_info: Callable[[], mp.NetworkInfo],
                  sync_info: Callable[[], mp.NetworkInfo],
-                 on_connect: Callable[[mp.NodeInfo], None] | None = None):
+                 on_connect: Callable[[mp.NodeInfo], None] | None = None,
+                 tcp_host: str | None = None, udp: bool = True):
+        """tcp_host: where to listen for Connect (default local_ip). udp=False skips the Scan socket, for when scans
+        arrive some other way and are answered with scan_response() (the Windows relay, docs/WSL.md)."""
         self.local_ip = local_ip
+        self.tcp_host = tcp_host or local_ip
+        self.udp = udp
         self.broadcast_ip = broadcast_ip
         self.port = port
         self.scan_info = scan_info
@@ -30,8 +35,15 @@ class ControlPlane:
 
     async def run(self) -> None:
         async with trio.open_nursery() as n:
-            n.start_soon(self._udp_loop)
+            if self.udp:
+                n.start_soon(self._udp_loop)
             n.start_soon(self._tcp_loop)
+
+    def scan_response(self) -> bytes:
+        """The ScanResp packet for a Scan."""
+        info = self.scan_info()
+        log.info("ScanResp:\n%s", info.describe())
+        return mp.encode_packet(mp.PacketType.SCAN_RESP, info.pack())
 
     # -- UDP: Scan -> ScanResp
     async def _udp_loop(self) -> None:
@@ -69,8 +81,8 @@ class ControlPlane:
 
     # -- TCP: Connect -> SyncNetwork
     async def _tcp_loop(self) -> None:
-        log.info("TCP server on %s:%d", self.local_ip, self.port)
-        await trio.serve_tcp(self._handle, self.port, host=self.local_ip)
+        log.info("TCP server on %s:%d", self.tcp_host, self.port)
+        await trio.serve_tcp(self._handle, self.port, host=self.tcp_host)
 
     async def _handle(self, stream: trio.SocketStream) -> None:
         peer = stream.socket.getpeername()

@@ -9,3 +9,8 @@ __pycache__/
 *.egg-info/
 *.pcap
 *.pcapng
+
+# Wintun, downloaded by each user from wintun.net (docs/WSL.md)
+windows/wintun.dll
+# Local Claude Code settings
+.claude/settings.local.json

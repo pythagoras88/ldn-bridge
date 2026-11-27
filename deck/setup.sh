@@ -20,5 +20,6 @@ python -m pip install --upgrade pip
 python -m pip install "https://github.com/kinnay/LDN/archive/refs/heads/master.zip"
 python -m pip install -e .
 python -c "import ldn, trio; print('ldn library OK')"
+[ -n "${LDN_INSTALLER:-}" ] && exit 0
 echo
 echo "Next: sudo bash deck/grant_caps.sh, then cp config.example.toml config.toml and edit it."
